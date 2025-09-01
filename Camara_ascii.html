@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Cámara ASCII</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: black;
+      color: white;
+      font-family: monospace;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+    }
+
+    #video {
+      width: 100%;
+      max-width: 600px;
+      display: block;
+    }
+
+    #ascii {
+      font-size: 6px;
+      line-height: 6px;
+      white-space: pre;
+      display: none;
+      margin-top: 10px;
+      text-align: center;
+    }
+
+    #controls {
+      margin: 10px;
+      display: flex;
+      gap: 10px;
+    }
+
+    select, button {
+      background: #222;
+      color: white;
+      border: 1px solid #555;
+      padding: 6px 10px;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+  <h2>📷 Cámara ASCII</h2>
+  <div id="controls">
+    <select id="filter">
+      <option value="normal">Normal</option>
+      <option value="ascii">ASCII</option>
+      <option value="bn">Blanco y Negro</option>
+    </select>
+    <button id="capture">📸 Tomar Foto</button>
+  </div>
+
+  <video id="video" autoplay playsinline></video>
+  <pre id="ascii"></pre>
+  <canvas id="canvas" style="display:none;"></canvas>
+
+  <script>
+    const video = document.getElementById("video");
+    const asciiDiv = document.getElementById("ascii");
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
+    const filterSelect = document.getElementById("filter");
+    const captureBtn = document.getElementById("capture");
+
+    const density = "Ñ@#W$9876543210?!abc;:+=-,._ ";
+
+    let currentFilter = "normal";
+
+    async function startCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        video.srcObject = stream;
+      } catch (err) {
+        alert("Error al acceder a la cámara: " + err);
+      }
+    }
+
+    function toAscii(imageData, width, height) {
+      let asciiImage = "";
+      for (let y = 0; y < height; y += 2) {
+        for (let x = 0; x < width; x++) {
+          const offset = (y * width + x) * 4;
+          const r = imageData[offset];
+          const g = imageData[offset + 1];
+          const b = imageData[offset + 2];
+          const avg = (r + g + b) / 3;
+          const charIndex = Math.floor((avg / 255) * (density.length - 1));
+          asciiImage += density.charAt(charIndex);
+        }
+        asciiImage += "\n";
+      }
+      return asciiImage;
+    }
+
+    function render() {
+      const width = 80;
+      const height = Math.floor(video.videoHeight / (video.videoWidth / width));
+      canvas.width = width;
+      canvas.height = height;
+      ctx.drawImage(video, 0, 0, width, height);
+      const frame = ctx.getImageData(0, 0, width, height);
+
+      if (currentFilter === "ascii") {
+        asciiDiv.style.display = "block";
+        video.style.display = "none";
+        asciiDiv.textContent = toAscii(frame.data, width, height);
+      } else if (currentFilter === "bn") {
+        asciiDiv.style.display = "none";
+        video.style.display = "block";
+        ctx.putImageData(frame, 0, 0);
+        const pixels = frame.data;
+        for (let i = 0; i < pixels.length; i += 4) {
+          const avg = (pixels[i] + pixels[i + 1] + pixels[i + 2]) / 3;
+          pixels[i] = pixels[i + 1] = pixels[i + 2] = avg;
+        }
+        ctx.putImageData(frame, 0, 0);
+        video.srcObject.getTracks().forEach(track => track.enabled = false);
+        video.src = canvas.toDataURL();
+      } else {
+        asciiDiv.style.display = "none";
+        video.style.display = "block";
+      }
+      requestAnimationFrame(render);
+    }
+
+    filterSelect.addEventListener("change", () => {
+      currentFilter = filterSelect.value;
+      if (currentFilter !== "bn") {
+        startCamera();
+      }
+    });
+
+    captureBtn.addEventListener("click", () => {
+      if (currentFilter === "ascii") {
+        const blob = new Blob([asciiDiv.textContent], { type: "text/plain" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "foto_ascii.txt";
+        a.click();
+      } else {
+        const a = document.createElement("a");
+        a.href = canvas.toDataURL("image/png");
+        a.download = "foto.png";
+        a.click();
+      }
+    });
+
+    startCamera();
+    requestAnimationFrame(render);
+  </script>
+</body>
+</html>
